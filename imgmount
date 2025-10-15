@@ -7,7 +7,7 @@ IMG_MOUNT_DIR="/mnt/img_mounts"
 LOG_FILE="/tmp/img_mounter_log.txt"
 LAST_DIR_FILE="$HOME/.img_mounter_last_dir.txt"
 
-ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mount/main/imgmount_icon.png"
+ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mounter/main/imgmount_icon.png"
 CONFIG_DIR="$HOME/.config/imgmount"
 ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
 DESKTOP_FILE="$HOME/Desktop/IMG_Mounter.desktop"
