@@ -161,23 +161,7 @@ perform_unmount(){
 }
 
 # ---------- GUI ----------
-# ---------- Elevation Helper ----------
-ensure_root_for_gui(){
-  if [[ $EUID -ne 0 ]]; then
-    echo "🔐 Elevating privileges for full access (mount/umount requires root)..."
-    if command -v pkexec >/dev/null 2>&1; then
-      exec pkexec bash "$0" gui
-    elif command -v gksudo >/dev/null 2>&1; then
-      exec gksudo bash "$0" gui
-    else
-      exec sudo -E bash "$0" gui
-    fi
-    exit 0
-  fi
-}
-
 gui_mode(){
-  ensure_root_for_gui
   ensure_base_dir
   while true; do
     ACT=$(zenity --list --no-markup --title="IMG Mounter" --column="Action" \
