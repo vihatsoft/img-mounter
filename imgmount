@@ -75,7 +75,7 @@ Version=1.0
 Name=$PRODUCTNAME
 Comment=$PRODUCTCOMMENT
 Icon=$ICON_PATH
-Exec=$SCRIPT_PATH gui
+Exec=/usr/local/bin/imgmount gui
 Categories=Utility;Accessories;
 StartupNotify=false
 NoDisplay=false
@@ -161,7 +161,18 @@ perform_unmount(){
 }
 
 # ---------- GUI ----------
+# ---------- Elevation Helper ----------
+ensure_root_for_gui(){
+  if [[ $EUID -ne 0 ]]; then
+    SCRIPT_ABS_PATH="$(realpath "$0")"
+    echo "🔐 Elevating privileges for full access (mount/umount requires root)..."
+    exec sudo -E bash "$SCRIPT_ABS_PATH" gui
+    exit 0
+  fi
+}
+
 gui_mode(){
+  ensure_root_for_gui
   ensure_base_dir
   while true; do
     ACT=$(zenity --list --no-markup --title="IMG Mounter" --column="Action" \
