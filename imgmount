@@ -7,19 +7,25 @@ IMG_MOUNT_DIR="/mnt/img_mounts"
 LOG_FILE="/tmp/img_mounter_log.txt"
 LAST_DIR_FILE="$HOME/.img_mounter_last_dir.txt"
 
-ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mounter/main/imgmount_icon.png"
-CONFIG_DIR="/home/$USER/.config/imgmount"
-ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
-DESKTOP_FILE="/home/$USER/Desktop/IMG_Mounter.desktop"
-SCRIPT_PATH="/usr/local/bin/imgmount"
-
 PRODUCTNAME="IMG Mounter"
 PRODUCTCOMMENT="Mount and Unmount .img Files Easily"
+
+# Detect actual user (even when run with sudo)
+REAL_USER=${SUDO_USER:-$USER}
+USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mounter/main/imgmount_icon.png"
+SCRIPT_PATH="/usr/local/bin/imgmount"
+CONFIG_DIR="$USER_HOME/.config/imgmount"
+ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
+DESKTOP_FILE="$USER_HOME/Desktop/IMG_Mounter.desktop"
+APP_MENU_PATH="$USER_HOME/.local/share/applications/IMG_Mounter.desktop"
+
 
 # Installer
 if [[ "$1" == "install" ]]; then
   echo "🔧 Installing $PRODUCTNAME..."
-
+  
   # Install main binary
   sudo install -m755 "$0" "$SCRIPT_PATH"
   echo "✅ Installed CLI: $SCRIPT_PATH"
