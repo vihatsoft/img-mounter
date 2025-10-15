@@ -1,97 +1,15 @@
 #!/bin/bash
-# IMG Mounter v4.18
-# Fix: Proper interface selection (1 = TUI, 2 = GUI)
-# Adds desktop shortcut launcher with icon for GUI mode
+# IMG Mounter v4.16
+# Fix: "Unmounting... please wait 🔄" stays visible until unmount completes
 
 IMG_MOUNT_DIR="/mnt/img_mounts"
 LOG_FILE="/tmp/img_mounter_log.txt"
 LAST_DIR_FILE="$HOME/.img_mounter_last_dir.txt"
 
-# Detect actual user (even when run with sudo)
-REAL_USER=${SUDO_USER:-$USER}
-USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
-
-ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mounter/main/imgmount_icon.png"
-CONFIG_DIR="$HOME/.config/imgmount"
-ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
-DESKTOP_FILE="$HOME/Desktop/IMG Mounter"
-SCRIPT_PATH="/usr/local/bin/imgmount"
-
-
-PRODUCTNAME="IMG Mounter"
-PRODUCTCOMMENT="Mount and Unmount .img Files Easily"
-
-# Installer (Debian 12 fix: prevent duplicate app drawer icon)
+# Installer
 if [[ "$1" == "install" ]]; then
-  echo "🔧 Installing $PRODUCTNAME..."
-
-  # Detect real user (not root)
-  REAL_USER=${SUDO_USER:-$USER}
-  USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
-
-  SCRIPT_PATH="/usr/local/bin/imgmount"
-  CONFIG_DIR="$USER_HOME/.config/imgmount"
-  ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
-  DESKTOP_FILE="$USER_HOME/Desktop/IMG Mounter.desktop"
-  APP_MENU_FILE="$USER_HOME/.local/share/applications/imgmounter.desktop"
-
-  # Install CLI
-  sudo install -m755 "$0" "$SCRIPT_PATH"
-  echo "✅ Installed CLI: $SCRIPT_PATH"
-
-  # Create config dir
-  mkdir -p "$CONFIG_DIR"
-
-  # Download icon
-  echo "⬇️  Downloading icon..."
-  wget --no-check-certificate -q "$ICON_URL" -O "$ICON_PATH" || {
-    echo "⚠️  Failed to download icon. Proceeding without icon."
-  }
-
-  # Create Desktop Shortcut (visible)
-  echo "🧩 Creating Desktop shortcut..."
-  cat <<EOF > "$DESKTOP_FILE"
-[Desktop Entry]
-Type=Application
-Terminal=false
-Version=1.0
-Name=$PRODUCTNAME
-Comment=$PRODUCTCOMMENT
-Icon=$ICON_PATH
-Exec=pkexec $SCRIPT_PATH gui
-Categories=Utility;Accessories;
-StartupNotify=false
-EOF
-
-  chmod +x "$DESKTOP_FILE"
-
-  # Create Menu Entry (hidden duplicate prevention)
-  mkdir -p "$(dirname "$APP_MENU_FILE")"
-  cat <<EOF > "$APP_MENU_FILE"
-[Desktop Entry]
-Type=Application
-Terminal=false
-Version=1.0
-Name=$PRODUCTNAME
-Comment=$PRODUCTCOMMENT
-Icon=$ICON_PATH
-Exec=pkexec $SCRIPT_PATH gui
-Categories=Utility;Accessories;
-StartupNotify=false
-NoDisplay=false
-EOF
-
-  # Refresh desktop + app database
-  update-desktop-database "$USER_HOME/.local/share/applications" >/dev/null 2>&1 || true
-  xdg-desktop-menu forceupdate >/dev/null 2>&1 || true
-
-  # Ownership fix
-  chown -R "$REAL_USER":"$REAL_USER" "$USER_HOME/Desktop" "$USER_HOME/.local/share/applications" "$CONFIG_DIR" 2>/dev/null
-
-  echo -e "\n🎉 Installation complete for user: $REAL_USER"
-  echo "You can now:"
-  echo "  • Run from terminal: imgmount"
-  echo "  • Or launch from Desktop/Menu → Accessories → IMG Mounter"
+  sudo install -m755 "$0" /usr/local/bin/imgmount
+  echo "✅ Installed. Run with: imgmount"
   exit 0
 fi
 
@@ -161,18 +79,7 @@ perform_unmount(){
 }
 
 # ---------- GUI ----------
-# ---------- Elevation Helper ----------
-ensure_root_for_gui(){
-  if [[ $EUID -ne 0 ]]; then
-    SCRIPT_ABS_PATH="$(realpath "$0")"
-    echo "🔐 Elevating privileges for full access (mount/umount requires root)..."
-    exec sudo -E bash "$SCRIPT_ABS_PATH" gui
-    exit 0
-  fi
-}
-
 gui_mode(){
-  ensure_root_for_gui
   ensure_base_dir
   while true; do
     ACT=$(zenity --list --no-markup --title="IMG Mounter" --column="Action" \
@@ -253,6 +160,7 @@ gui_mode(){
             --text="Are you sure to unmount all partitions of: $LOOP ?" \
             --ok-label="Yes" --cancel-label="No" || continue
 
+          # Show wait dialog and hold it while unmounting
           {
             (
               echo "10"; sleep 0.2
@@ -275,9 +183,7 @@ gui_mode(){
 
       "Uninstall")
         zenity --question --no-markup --text="Uninstall imgmount?" --ok-label="Yes" --cancel-label="No" || continue
-        sudo rm -f "$SCRIPT_PATH" "$DESKTOP_FILE"
-        rm -rf "$CONFIG_DIR"
-        sudo rm -f "$USER_HOME/Desktop/IMG Mounter.desktop" "$USER_HOME/.local/share/applications/imgmounter.desktop"
+        sudo rm -f /usr/local/bin/imgmount
         zenity --info --no-markup --text="Uninstalled successfully."
         exit 0
       ;;
@@ -337,9 +243,7 @@ tui_mode(){
 
       3)
         if whiptail --yesno "Uninstall imgmount?" 8 50; then
-          sudo rm -f "$SCRIPT_PATH" "$DESKTOP_FILE"
-          sudo rm -f "$USER_HOME/Desktop/IMG Mounter.desktop" "$USER_HOME/.local/share/applications/imgmounter.desktop"
-          rm -rf "$CONFIG_DIR"
+          sudo rm -f /usr/local/bin/imgmount
           whiptail --msgbox "Removed successfully." 8 40
           exit 0
         fi
@@ -351,14 +255,6 @@ tui_mode(){
 }
 
 # ---------- Interface Selection ----------
-if [[ "$1" == "gui" ]]; then
-  gui_mode
-else
-  echo -e "\nChoose Interface:\n  1) Terminal (Whiptail) [Default]\n  2) GUI (Zenity)\n"
-  read -p "Enter choice [1-2]: " iface; iface=${iface:-1}
-  if [[ "$iface" == "2" ]]; then
-    gui_mode
-  else
-    tui_mode
-  fi
-fi
+echo -e "\nChoose Interface:\n  1) Terminal (Whiptail) [Default]\n  2) GUI (Zenity)\n"
+read -p "Enter choice [1-2]: " iface; iface=${iface:-1}
+[[ "$iface" == "2" ]] && gui_mode || tui_mode
