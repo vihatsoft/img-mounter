@@ -58,7 +58,7 @@ Version=1.0
 Name=$PRODUCTNAME
 Comment=$PRODUCTCOMMENT
 Icon=$ICON_PATH
-Exec=$SCRIPT_PATH gui
+Exec=pkexec $SCRIPT_PATH gui
 Categories=Utility;Accessories;
 StartupNotify=false
 EOF
@@ -75,7 +75,7 @@ Version=1.0
 Name=$PRODUCTNAME
 Comment=$PRODUCTCOMMENT
 Icon=$ICON_PATH
-Exec=/usr/local/bin/imgmount gui
+Exec=pkexec $SCRIPT_PATH gui
 Categories=Utility;Accessories;
 StartupNotify=false
 NoDisplay=false
