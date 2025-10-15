@@ -57,9 +57,6 @@ To completely remove IMG Mounter:
 
 ```bash
 sudo rm -f /usr/local/bin/imgmount
-rm -rf ~/.config/imgmount
-rm -f ~/Desktop/IMG_Mounter.desktop
-rm -f ~/.local/share/applications/IMG_Mounter.desktop
 ```
 
 Or open the app → select **“Uninstall”** from the main menu.
