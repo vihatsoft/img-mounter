@@ -7,30 +7,39 @@ IMG_MOUNT_DIR="/mnt/img_mounts"
 LOG_FILE="/tmp/img_mounter_log.txt"
 LAST_DIR_FILE="$HOME/.img_mounter_last_dir.txt"
 
-PRODUCTNAME="IMG Mounter"
-PRODUCTCOMMENT="Mount and Unmount .img Files Easily"
-
 # Detect actual user (even when run with sudo)
 REAL_USER=${SUDO_USER:-$USER}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
 ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mounter/main/imgmount_icon.png"
-SCRIPT_PATH="/usr/local/bin/imgmount"
-CONFIG_DIR="$USER_HOME/.config/imgmount"
+CONFIG_DIR="$HOME/.config/imgmount"
 ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
-DESKTOP_FILE="$USER_HOME/Desktop/IMG_Mounter.desktop"
-APP_MENU_PATH="$USER_HOME/.local/share/applications/IMG_Mounter.desktop"
+DESKTOP_FILE="$HOME/Desktop/IMG_Mounter.desktop"
+SCRIPT_PATH="/usr/local/bin/imgmount"
 
 
-# Installer
+PRODUCTNAME="IMG Mounter"
+PRODUCTCOMMENT="Mount and Unmount .img Files Easily"
+
+# Installer (Debian 12 fix: prevent duplicate app drawer icon)
 if [[ "$1" == "install" ]]; then
   echo "🔧 Installing $PRODUCTNAME..."
-  
-  # Install main binary
+
+  # Detect real user (not root)
+  REAL_USER=${SUDO_USER:-$USER}
+  USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+  SCRIPT_PATH="/usr/local/bin/imgmount"
+  CONFIG_DIR="$USER_HOME/.config/imgmount"
+  ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
+  DESKTOP_FILE="$USER_HOME/Desktop/IMG Mounter.desktop"
+  APP_MENU_FILE="$USER_HOME/.local/share/applications/imgmounter.desktop"
+
+  # Install CLI
   sudo install -m755 "$0" "$SCRIPT_PATH"
   echo "✅ Installed CLI: $SCRIPT_PATH"
 
-  # Create config directory
+  # Create config dir
   mkdir -p "$CONFIG_DIR"
 
   # Download icon
@@ -39,7 +48,7 @@ if [[ "$1" == "install" ]]; then
     echo "⚠️  Failed to download icon. Proceeding without icon."
   }
 
-  # Create Desktop Shortcut
+  # Create Desktop Shortcut (visible)
   echo "🧩 Creating Desktop shortcut..."
   cat <<EOF > "$DESKTOP_FILE"
 [Desktop Entry]
@@ -50,22 +59,39 @@ Name=$PRODUCTNAME
 Comment=$PRODUCTCOMMENT
 Icon=$ICON_PATH
 Exec=$SCRIPT_PATH gui
-Categories=Utility
+Categories=Utility;Accessories;
 StartupNotify=false
 EOF
 
   chmod +x "$DESKTOP_FILE"
-  echo "✅ Desktop shortcut created at: $DESKTOP_FILE"
 
-  # Add to application menu
-  APP_MENU_PATH="$HOME/.local/share/applications/IMG_Mounter.desktop"
-  mkdir -p "$(dirname "$APP_MENU_PATH")"
-  cp "$DESKTOP_FILE" "$APP_MENU_PATH"
+  # Create Menu Entry (hidden duplicate prevention)
+  mkdir -p "$(dirname "$APP_MENU_FILE")"
+  cat <<EOF > "$APP_MENU_FILE"
+[Desktop Entry]
+Type=Application
+Terminal=false
+Version=1.0
+Name=$PRODUCTNAME
+Comment=$PRODUCTCOMMENT
+Icon=$ICON_PATH
+Exec=$SCRIPT_PATH gui
+Categories=Utility;Accessories;
+StartupNotify=false
+NoDisplay=false
+EOF
 
-  echo -e "\n🎉 Installation complete!"
+  # Refresh desktop + app database
+  update-desktop-database "$USER_HOME/.local/share/applications" >/dev/null 2>&1 || true
+  xdg-desktop-menu forceupdate >/dev/null 2>&1 || true
+
+  # Ownership fix
+  chown -R "$REAL_USER":"$REAL_USER" "$USER_HOME/Desktop" "$USER_HOME/.local/share/applications" "$CONFIG_DIR" 2>/dev/null
+
+  echo -e "\n🎉 Installation complete for user: $REAL_USER"
   echo "You can now:"
   echo "  • Run from terminal: imgmount"
-  echo "  • Or launch from Desktop/Menu → IMG Mounter"
+  echo "  • Or launch from Desktop/Menu → Accessories → IMG Mounter"
   exit 0
 fi
 
@@ -240,6 +266,7 @@ gui_mode(){
         zenity --question --no-markup --text="Uninstall imgmount?" --ok-label="Yes" --cancel-label="No" || continue
         sudo rm -f "$SCRIPT_PATH" "$DESKTOP_FILE"
         rm -rf "$CONFIG_DIR"
+        sudo rm -f "$USER_HOME/Desktop/IMG Mounter.desktop" "$USER_HOME/.local/share/applications/imgmounter.desktop"
         zenity --info --no-markup --text="Uninstalled successfully."
         exit 0
       ;;
@@ -300,6 +327,7 @@ tui_mode(){
       3)
         if whiptail --yesno "Uninstall imgmount?" 8 50; then
           sudo rm -f "$SCRIPT_PATH" "$DESKTOP_FILE"
+          sudo rm -f "$USER_HOME/Desktop/IMG Mounter.desktop" "$USER_HOME/.local/share/applications/imgmounter.desktop"
           rm -rf "$CONFIG_DIR"
           whiptail --msgbox "Removed successfully." 8 40
           exit 0
