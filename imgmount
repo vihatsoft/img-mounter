@@ -1,0 +1,319 @@
+#!/bin/bash
+# IMG Mounter v4.18
+# Fix: Proper interface selection (1 = TUI, 2 = GUI)
+# Adds desktop shortcut launcher with icon for GUI mode
+
+IMG_MOUNT_DIR="/mnt/img_mounts"
+LOG_FILE="/tmp/img_mounter_log.txt"
+LAST_DIR_FILE="$HOME/.img_mounter_last_dir.txt"
+
+ICON_URL="https://raw.githubusercontent.com/vihatsoft/img-mount/main/imgmount_icon.png"
+CONFIG_DIR="$HOME/.config/imgmount"
+ICON_PATH="$CONFIG_DIR/imgmount_icon.png"
+DESKTOP_FILE="$HOME/Desktop/IMG_Mounter.desktop"
+SCRIPT_PATH="/usr/local/bin/imgmount"
+
+PRODUCTNAME="IMG Mounter"
+PRODUCTCOMMENT="Mount and Unmount .img Files Easily"
+
+# Installer
+if [[ "$1" == "install" ]]; then
+  echo "🔧 Installing $PRODUCTNAME..."
+
+  # Install main binary
+  sudo install -m755 "$0" "$SCRIPT_PATH"
+  echo "✅ Installed CLI: $SCRIPT_PATH"
+
+  # Create config directory
+  mkdir -p "$CONFIG_DIR"
+
+  # Download icon
+  echo "⬇️  Downloading icon..."
+  wget -q "$ICON_URL" -O "$ICON_PATH" || {
+    echo "⚠️  Failed to download icon. Proceeding without icon."
+  }
+
+  # Create Desktop Shortcut
+  echo "🧩 Creating Desktop shortcut..."
+  cat <<EOF > "$DESKTOP_FILE"
+[Desktop Entry]
+Type=Application
+Terminal=false
+Version=1.0
+Name=$PRODUCTNAME
+Comment=$PRODUCTCOMMENT
+Icon=$ICON_PATH
+Exec=$SCRIPT_PATH gui
+Categories=Utility
+StartupNotify=false
+EOF
+
+  chmod +x "$DESKTOP_FILE"
+  echo "✅ Desktop shortcut created at: $DESKTOP_FILE"
+
+  # Add to application menu
+  APP_MENU_PATH="$HOME/.local/share/applications/IMG_Mounter.desktop"
+  mkdir -p "$(dirname "$APP_MENU_PATH")"
+  cp "$DESKTOP_FILE" "$APP_MENU_PATH"
+
+  echo -e "\n🎉 Installation complete!"
+  echo "You can now:"
+  echo "  • Run from terminal: imgmount"
+  echo "  • Or launch from Desktop/Menu → IMG Mounter"
+  exit 0
+fi
+
+# Add essential paths
+for d in /sbin /usr/sbin /usr/local/sbin; do [[ ":$PATH:" == *":$d:"* ]] || PATH="$PATH:$d"; done
+
+# Ensure dependencies
+ensure_pkg(){ local b="$1" p="$2"; command -v "$b" >/dev/null 2>&1 && return
+  echo "Installing $p ..."; sudo apt update -y >/dev/null 2>&1; sudo apt install -y "$p" >/dev/null 2>&1
+  command -v "$b" >/dev/null 2>&1 || { echo "Missing $b"; exit 1; }; }
+ensure_pkg losetup util-linux; ensure_pkg numfmt coreutils; ensure_pkg xdg-open xdg-utils
+ensure_pkg zenity zenity; ensure_pkg whiptail whiptail
+LOS=$(command -v losetup)
+
+# Helpers
+log(){ echo "$(date '+%F %T') - $1" >>"$LOG_FILE"; }
+get_last_dir(){ [[ -f "$LAST_DIR_FILE" ]] && cat "$LAST_DIR_FILE" || echo "$HOME/Downloads"; }
+save_last_dir(){ echo "$1" > "$LAST_DIR_FILE"; }
+ensure_base_dir(){ sudo mkdir -p "$IMG_MOUNT_DIR"; }
+escape_zen_text(){ printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+dyn_height(){ local rows=$1 base=${2:-180} per=${3:-40} max=${4:-500}; local h=$(( base + rows * per )); (( h > max )) && h=$max; echo "$h"; }
+
+# List mounted .img instances
+list_mounted_images(){
+  local e=()
+  for s in /sys/block/loop*; do
+    [[ -e "$s" ]] || continue
+    local loop="/dev/$(basename "$s")" back=""
+    [[ -r "$s/loop/backing_file" ]] && back=$(sudo cat "$s/loop/backing_file" 2>/dev/null)
+    [[ -z "$back" ]] && back=$(sudo "$LOS" -O BACK-FILE --noheadings "$loop" 2>/dev/null | awk '{$1=$1;print}')
+    [[ -z "$back" ]] && continue
+    mapfile -t m < <(mount | awk -v l="$loop" '$1~("^"l) || $1~("^"l"p"){print $3}')
+    local f=(); for mnt in "${m[@]}"; do [[ "$mnt" == "$IMG_MOUNT_DIR"* ]] && f+=("$mnt"); done
+    [[ ${#f[@]} -eq 0 ]] && continue
+    local base=$(dirname "${f[0]}") size="unknown"
+    [[ -f "$back" ]] && size=$(numfmt --to=iec-i --suffix=B "$(stat -c %s "$back")")
+    e+=("$back|$loop|$size|${#f[@]}|$base")
+  done
+  [[ ${#e[@]} -gt 0 ]] && printf "%s\n" "${e[@]}"
+}
+
+# Perform Mount
+perform_mount(){
+  local IMG="$1" MODE="$2" FOLDER="$3"
+  ensure_base_dir
+  [[ ! -f "$IMG" ]] && return 1
+  local FLAG="" OPT=""
+  [[ "$MODE" == "ro" ]] && FLAG="-r" && OPT="-o ro"
+  local BASE="$IMG_MOUNT_DIR/$FOLDER"; sudo mkdir -p "$BASE"
+  local LOOP=$(sudo "$LOS" --show -fP $FLAG "$IMG" 2>>"$LOG_FILE") || return 1
+  mapfile -t PARTS < <(ls "${LOOP}"p* 2>/dev/null); [[ ${#PARTS[@]} -eq 0 ]] && PARTS=("$LOOP")
+  local ok=false
+  for P in "${PARTS[@]}"; do pn="${P##*p}"; [[ "$P" == "$LOOP" ]] && pn="0"
+    MP="$BASE/p$pn"; sudo mkdir -p "$MP"
+    if sudo mount $OPT "$P" "$MP" 2>>"$LOG_FILE"; then ok=true; else sudo rmdir "$MP"; fi
+  done
+  $ok && echo "$BASE" || return 1
+}
+
+# Perform Unmount
+perform_unmount(){
+  local LOOP="$1" BASE="$2"
+  while read -r m; do [[ -n "$m" ]] && sudo umount "$m" 2>>"$LOG_FILE" && sudo rmdir "$m" 2>/dev/null; done \
+    < <(mount | awk -v b="$BASE" '$3~("^"b"/"){print $3}')
+  sudo "$LOS" -d "$LOOP" 2>/dev/null; sudo losetup -D 2>/dev/null
+  sudo find "$IMG_MOUNT_DIR" -type d -empty -delete 2>/dev/null
+}
+
+# ---------- GUI ----------
+gui_mode(){
+  ensure_base_dir
+  while true; do
+    ACT=$(zenity --list --no-markup --title="IMG Mounter" --column="Action" \
+      "Mount .img" "Unmount .img" "Uninstall" "Exit" \
+      --width=480 --height=320) || exit 0
+
+    case "$ACT" in
+      "Mount .img")
+        choices=("Select .img From Directory Path" "Enter .img File Path")
+        SRC=$(zenity --list --no-markup --title="Select Source" --column="Option" \
+          "${choices[@]}" --width=480 --height=$(dyn_height ${#choices[@]})) || continue
+
+        if [[ "$SRC" == "Select .img From Directory Path" ]]; then
+          DIR=$(zenity --entry --no-markup --title="Directory" \
+            --entry-text="$(get_last_dir)" \
+            --text="Enter directory to search for .img files:" \
+            --width=520 --height=240) || continue
+          [[ -d "$DIR" ]] || { zenity --error --no-markup --text="Directory not found:\n$DIR"; continue; }
+          save_last_dir "$DIR"
+          mapfile -t F < <(find "$DIR" -maxdepth 1 -type f -iname "*.img" -print)
+          [[ ${#F[@]} -eq 0 ]] && { zenity --info --no-markup --text="No .img found."; continue; }
+          ROW=(); for f in "${F[@]}"; do s=$(numfmt --to=iec-i --suffix=B "$(stat -c %s "$f")"); ROW+=("$(basename "$f")" "$s"); done
+          NAME=$(zenity --list --no-markup --title="Select Image" --column="File" --column="Size" \
+            "${ROW[@]}" --width=640 --height=$(dyn_height ${#F[@]} 250 30 600)) || continue
+          IMG="$DIR/$NAME"
+        else
+          IMG=$(zenity --file-selection --no-markup --title="Select .img file") || continue
+        fi
+
+        [[ ! -f "$IMG" ]] && { zenity --error --no-markup --text="File not found:\n$IMG"; continue; }
+
+        MODES=("Read Only" "Read & Write")
+        MODE=$(zenity --list --no-markup --title="Mount Mode" --column="Mode" \
+          "${MODES[@]}" --width=400 --height=$(dyn_height ${#MODES[@]})) || continue
+        [[ "$MODE" == "Read Only" ]] && MODE="ro" || MODE="rw"
+
+        TIME=$(date '+%Y-%m-%d_%I-%M-%S%p')
+        BASE=$(basename "$IMG" .img)
+        FOLDER=$(zenity --entry --no-markup --title="Mount Folder" \
+          --text="Folder name under $IMG_MOUNT_DIR:" \
+          --entry-text="${TIME}_${BASE}" --width=500 --height=240) || continue
+
+        MP=$(perform_mount "$IMG" "$MODE" "$FOLDER") || { 
+          zenity --error --no-markup --text="Mount failed. See $LOG_FILE"; 
+          continue; 
+        }
+
+        safe_mp=$(escape_zen_text "$MP")
+        if zenity --question --no-markup --title="Mounted" \
+            --text="✅ Mounted successfully at: $safe_mp" \
+            --ok-label="OK" --cancel-label="🗂 Open Mount Folder"; then
+            : 
+        else
+            xdg-open "$MP"
+        fi
+        sleep 0.5
+      ;;
+
+      "Unmount .img")
+        while :; do
+          mapfile -t RAW < <(list_mounted_images)
+          [[ ${#RAW[@]} -eq 0 ]] && { zenity --info --no-markup --text="No mounted images."; break; }
+
+          ROWS=()
+          for l in "${RAW[@]}"; do
+            IFS='|' read -r b ldev sz p base <<<"$l"
+            ROWS+=("FALSE" "$(basename "$b")" "$ldev" "$sz" "${p} part(s)" "$base")
+          done
+
+          LOOP=$(zenity --list --no-markup --radiolist --title="Select Image to Unmount" \
+            --column="Select" --column="Image File" --column="Loop Device" \
+            --column="Size" --column="Parts" --column="Mount Path" \
+            "${ROWS[@]}" --width=1000 --height=$(dyn_height ${#ROWS[@]} 360 25 600) --print-column=3) || break
+
+          [[ -z "$LOOP" ]] && break
+          BASE=$(printf "%s\n" "${RAW[@]}" | awk -F'|' -v l="$LOOP" '$2==l{print $5;exit}')
+          zenity --question --no-markup --title="Confirm" \
+            --text="Are you sure to unmount all partitions of: $LOOP ?" \
+            --ok-label="Yes" --cancel-label="No" || continue
+
+          {
+            (
+              echo "10"; sleep 0.2
+              perform_unmount "$LOOP" "$BASE"
+              echo "100"
+            ) | zenity --progress --no-cancel --pulsate \
+              --title="Unmounting..." \
+              --text="Unmounting… please wait 🔄" \
+              --width=400 --auto-close
+          } >/dev/null 2>&1
+
+          esc_loop=$(escape_zen_text "$LOOP")
+          zenity --info --no-markup --title="Success" \
+            --text="✅ Fully Unmounted & Detached: $esc_loop"
+
+          mapfile -t RAW_AFTER < <(list_mounted_images)
+          [[ ${#RAW_AFTER[@]} -eq 0 ]] && zenity --info --no-markup --text="No mounted images." || continue
+        done
+      ;;
+
+      "Uninstall")
+        zenity --question --no-markup --text="Uninstall imgmount?" --ok-label="Yes" --cancel-label="No" || continue
+        sudo rm -f "$SCRIPT_PATH" "$DESKTOP_FILE"
+        rm -rf "$CONFIG_DIR"
+        zenity --info --no-markup --text="Uninstalled successfully."
+        exit 0
+      ;;
+
+      "Exit") exit 0;;
+    esac
+  done
+}
+
+# ---------- TUI ----------
+tui_mode(){
+  ensure_base_dir
+  while true; do
+    C=$(whiptail --title "IMG Mounter" --menu "Choose action:" 15 70 5 \
+      1 "Mount .img" 2 "Unmount .img" 3 "Uninstall" 4 "Exit" 3>&1 1>&2 2>&3) || exit 0
+
+    case "$C" in
+      1)
+        SRC=$(whiptail --menu "Select source:" 10 60 2 1 "Select .img From Directory Path" 2 "Enter full path" 3>&1 1>&2 2>&3) || continue
+        if [[ "$SRC" == "1" ]]; then
+          DIR=$(whiptail --inputbox "Enter directory:" 10 60 "$(get_last_dir)" 3>&1 1>&2 2>&3) || continue
+          [[ -d "$DIR" ]] || { whiptail --msgbox "Directory not found." 8 50; continue; }
+          save_last_dir "$DIR"
+          mapfile -t F < <(find "$DIR" -maxdepth 1 -type f -iname "*.img" -print)
+          [[ ${#F[@]} -eq 0 ]] && { whiptail --msgbox "No .img found." 8 50; continue; }
+          M=(); for f in "${F[@]}"; do s=$(numfmt --to=iec-i --suffix=B "$(stat -c %s "$f")"); M+=("$(basename "$f")" "$s"); done
+          N=$(whiptail --menu "Select image:" 20 70 10 "${M[@]}" 3>&1 1>&2 2>&3) || continue
+          IMG="$DIR/$N"
+        else
+          IMG=$(whiptail --inputbox "Enter full .img path:" 10 70 "$(get_last_dir)" 3>&1 1>&2 2>&3) || continue
+        fi
+
+        [[ ! -f "$IMG" ]] && { whiptail --msgbox "File not found." 8 50; continue; }
+
+        MODE=$(whiptail --menu "Select mode:" 10 50 2 ro "Read Only" rw "Read & Write" 3>&1 1>&2 2>&3) || continue
+        TIME=$(date '+%Y-%m-%d_%I-%M-%S%p')
+        BASE=$(basename "$IMG" .img)
+        FOLDER=$(whiptail --inputbox "Folder under $IMG_MOUNT_DIR:" 10 70 "${TIME}_${BASE}" 3>&1 1>&2 2>&3) || continue
+
+        MP=$(perform_mount "$IMG" "$MODE" "$FOLDER") || { whiptail --msgbox "Mount failed." 8 50; continue; }
+        whiptail --msgbox "✅ Mounted at:\n$MP" 10 60
+      ;;
+
+      2)
+        while :; do
+          mapfile -t R < <(list_mounted_images)
+          [[ ${#R[@]} -eq 0 ]] && { whiptail --msgbox "No mounted images." 8 50; break; }
+          M=(); for l in "${R[@]}"; do IFS='|' read -r b ldev sz p base <<<"$l"; M+=("$ldev" "$(basename "$b") [$sz] – ${p} parts – $base"); done
+          LOOP=$(whiptail --menu "Select to unmount:" 20 80 10 "${M[@]}" 3>&1 1>&2 2>&3) || break
+          BASE=$(printf "%s\n" "${R[@]}" | awk -F'|' -v l="$LOOP" '$2==l{print $5;exit}')
+          whiptail --yesno "Unmount all partitions of: $LOOP ?" 10 60 || continue
+          whiptail --infobox "Unmounting… please wait 🔄" 6 50; sleep 1
+          perform_unmount "$LOOP" "$BASE"
+          whiptail --msgbox "✅ Fully Unmounted & Detached:\n$LOOP" 8 60
+        done
+      ;;
+
+      3)
+        if whiptail --yesno "Uninstall imgmount?" 8 50; then
+          sudo rm -f "$SCRIPT_PATH" "$DESKTOP_FILE"
+          rm -rf "$CONFIG_DIR"
+          whiptail --msgbox "Removed successfully." 8 40
+          exit 0
+        fi
+      ;;
+
+      4) exit 0;;
+    esac
+  done
+}
+
+# ---------- Interface Selection ----------
+if [[ "$1" == "gui" ]]; then
+  gui_mode
+else
+  echo -e "\nChoose Interface:\n  1) Terminal (Whiptail) [Default]\n  2) GUI (Zenity)\n"
+  read -p "Enter choice [1-2]: " iface; iface=${iface:-1}
+  if [[ "$iface" == "2" ]]; then
+    gui_mode
+  else
+    tui_mode
+  fi
+fi
