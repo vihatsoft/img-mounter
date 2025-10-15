@@ -29,7 +29,7 @@ if [[ "$1" == "install" ]]; then
 
   # Download icon
   echo "⬇️  Downloading icon..."
-  wget -q "$ICON_URL" -O "$ICON_PATH" || {
+  wget --no-check-certificate -q "$ICON_URL" -O "$ICON_PATH" || {
     echo "⚠️  Failed to download icon. Proceeding without icon."
   }
 
