@@ -24,13 +24,13 @@ Run the following commands in your terminal:
 
 ```bash
 # Download the script
-wget https://raw.githubusercontent.com/<your-username>/img-mounter/main/imgmount.sh -O imgmount.sh
+wget https://raw.githubusercontent.com/vihatsoft/img-mounter/main/imgmount -O imgmount
 
 # Make it executable
-chmod +x imgmount.sh
+chmod +x imgmount
 
 # Install system-wide (requires sudo)
-sudo ./imgmount.sh install
+sudo ./imgmount install
 ```
 
 After installation:
@@ -103,7 +103,7 @@ If not found, they’ll be installed automatically during setup.
 
 | Task | Command / Action |
 |------|------------------|
-| Install | `sudo ./imgmount.sh install` |
+| Install | `sudo ./imgmount install` |
 | Launch GUI | `imgmount gui` or click Desktop Icon |
 | Launch TUI | `imgmount` → Choose option 1 |
 | Uninstall | Run from menu → “Uninstall” or manually remove files |
