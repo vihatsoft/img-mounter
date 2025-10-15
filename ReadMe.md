@@ -10,8 +10,6 @@ Easily mount and unmount `.img` files (such as Raspberry Pi OS backups, disk ima
 
 ✅ Mount and unmount `.img` files (supports multiple partitions)  
 ✅ Dual interface: **GUI (Zenity)** and **TUI (Whiptail)**  
-✅ Auto-downloads custom icon for app  
-✅ Creates Desktop and Application Menu shortcut  
 ✅ Read-only or Read & Write mount modes  
 ✅ Progress dialog during unmounting  
 ✅ Simple install and uninstall
@@ -34,44 +32,22 @@ sudo ./imgmount install
 ```
 
 After installation:
-- Command-line tool: `/usr/local/bin/imgmount`
-- Icon stored at: `~/.config/imgmount/imgmount_icon.png`
-- Desktop shortcut: `~/Desktop/IMG_Mounter.desktop`
-- Application menu entry: `Utility → IMG Mounter`
+- Run command : `imgmount`
 
 ---
 
 ## 🚀 Usage
 
-### 🖥️ **Open GUI Mode (Zenity)**
+### 🖥️ **Open GUI or TUI Mode**
 
-- From your **Desktop shortcut**, double-click “**IMG Mounter**”
-- OR run this in terminal:
+- run this in terminal choose GUI or TUI mode:
   ```bash
-  imgmount gui
+  imgmount
   ```
 
 The GUI lets you:
 - Mount `.img` files (read-only or writable)
 - Unmount mounted images
-- View progress and success dialogs
-
----
-
-### 💻 **Open Terminal Mode (Whiptail)**
-
-Run the tool without arguments:
-```bash
-imgmount
-```
-
-You’ll see a menu like this:
-```
-Choose Interface:
-  1) Terminal (Whiptail)
-  2) GUI (Zenity)
-```
-Choose **1** for the text-based interface.
 
 ---
 
