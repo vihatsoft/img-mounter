@@ -11,7 +11,6 @@ Easily mount and unmount `.img` files (such as Raspberry Pi OS backups, disk ima
 ✅ Mount and unmount `.img` files (supports multiple partitions)  
 ✅ Dual interface: **GUI (Zenity)** and **TUI (Whiptail)**  
 ✅ Read-only or Read & Write mount modes  
-✅ Progress dialog during unmounting  
 ✅ Simple install and uninstall
 
 ---
