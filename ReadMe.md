@@ -2,7 +2,7 @@
 
 A lightweight **Bash-based image mounting utility** for Linux that provides both a **Graphical (Zenity)** and **Terminal (Whiptail)** interface.
 
-Easily mount and unmount `.img` files (such as Raspberry Pi OS backups, disk images, etc.) with just a few clicks — no commands needed!  
+Easily mount and unmount `.img` files with just a few clicks — no commands needed!  
 
 ---
 
