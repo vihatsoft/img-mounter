@@ -76,8 +76,7 @@ If not found, they’ll be installed automatically during setup.
 | Task | Command / Action |
 |------|------------------|
 | Install | `sudo ./imgmount install` |
-| Launch GUI | `sudo imgmount gui` or click Desktop Icon |
-| Launch TUI | `sudo imgmount` → Choose option 1 |
+| Launch GUI/TUI | `sudo imgmount` → Choose option 1 |
 | Uninstall | Run from menu → “Uninstall” or manually remove files |
 
 ---
